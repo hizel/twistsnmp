@@ -12,7 +12,7 @@ mibView = view.MibViewController(mibBuilder)
 snmpEngine = engine.SnmpEngine()
 snmpEngine.registerTransportDispatcher(dispatch.TwistedDispatcher())
 
-config.addV1System(snmpEngine, 'agent1', 'exodus')
+config.addV1System(snmpEngine, 'agent1', 'public')
 config.addTargetParams(snmpEngine, 'params1', 'agent1', 'noAuthNoPriv', 1)
 config.addTargetAddr(
         snmpEngine, 'gals', config.snmpUDPDomain,
