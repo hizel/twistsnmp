@@ -5,6 +5,7 @@ from datetime import datetime
 from twisted.internet.task import LoopingCall
 from twisted.internet import reactor, defer
 from twisted.enterprise import adbapi
+from twisted.web import xmlrpc, server
 
 from pysnmp.entity import engine, config
 from pysnmp.carrier.twisted import dispatch
@@ -62,6 +63,9 @@ class GetCommandGenerator(cmdgen.GetCommandGenerator):
                     pMod.apiPDU.getVarBinds(rspPDU),
                     cbCtx)
                 )
+
+class TwistSnmp():
+    pass
 
 
 snmpEngine = engine.SnmpEngine()
