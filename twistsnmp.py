@@ -5,7 +5,7 @@ from datetime import datetime
 from twisted.internet.task import LoopingCall
 from twisted.internet import reactor, defer
 from twisted.enterprise import adbapi
-from twisted.web import xmlrpc, server
+from twisted.web import xmlrpc, server, resource
 
 from pysnmp.entity import engine, config
 from pysnmp.carrier.twisted import dispatch
@@ -86,20 +86,17 @@ class TwistSnmp(object):
 
     def _error_cb(self, sendRequestHandle, errorIndication, errorStatus, errorIndex,
                       varBinds, cbCtx):
-        cbCtx.callback(self, (errorIndication, errorStatus, errorIndex, varBinds, cbCtx))
+        cbCtx.callback((errorIndication, errorStatus, errorIndex, varBinds, cbCtx))
 
     def _snmp_recv_task(self, (errorIndication, errorStatus, errorIndex, varBinds, cbCtx)):
         debug('snmp recv for %s %s' % (cbCtx.job_host, cbCtx.job_uid))
+        cbCtx.snmp_jobs[cbCtx.job_name][2] = datetime.now()
         if errorIndication or errorStatus:
             error('snmp error for job %s %s' % (cbCtx.job_name, cbCtx.job_uid))
+            cbCtx.snmp_jobs[cbCtx.job_name][3] = 'ERROR'
             return
-        for oid, val in varBinds:
-            if val is None:
-                info('%s: %s' % (cbCtx.job_name, oid.prettyPrint()))
-            else:
-                info('%s: %s=%s' % (cbCtx.job_name, oid.prettyPrint(),
-                    val.prettyPrint()))
-
+        cbCtx.snmp_jobs[cbCtx.job_name][1] = varBinds
+        cbCtx.snmp_jobs[cbCtx.job_name][3] = 'OK'
 
     def _job_snmp_task(self, host, name, uid_str):
         uid_tuple = uid_str.split('.')[1:]
@@ -115,6 +112,7 @@ class TwistSnmp(object):
         df.job_host = host
         df.job_uid = uid
         df.job_name = name
+        df.snmp_jobs = self.snmp_jobs 
         df.addCallback(self._snmp_recv_task)
 
     def _job_reschedule_task(self, new_jobs):
@@ -127,7 +125,8 @@ class TwistSnmp(object):
                 job_name = '%s.%s' % (job[0],job[1])
                 info('rem new jobs: %s ' % job_name)
                 if job_name in self.snmp_jobs:
-                    self.snmp_jobs[job_name].stop()
+                    self.snmp_jobs[job_name][0].stop()
+                    del self.snmp_jobs[job_name]
             for job in jobs_add:
                 job_host = job[0]
                 job_name = '%s.%s' % (job[0],job[1])
@@ -136,7 +135,7 @@ class TwistSnmp(object):
                 info('add new jobs: %s with %d sec' % (job_name, job_freq))
                 snmp_job = LoopingCall(self._job_snmp_task, *(job_host, job_name, job_uid))
                 snmp_job.start(job_freq)
-                self.snmp_jobs[job_name] =  snmp_job
+                self.snmp_jobs[job_name] = [snmp_job, 0, 0, 'UNKNOWN']
             self.jobs = new_jobs
         
     def _db_receive_task(self, new_hosts):
@@ -191,20 +190,44 @@ class TwistSnmp(object):
                 hosts""")
         df.addCallback(self._db_receive_task)
         df.addErrback(self._db_err_task)
-        debug('run db_task')
 
     def start(self):
         self.db_lc = LoopingCall(self._db_task)
         self.db_lc.start(15)
 
+    def status(self):
+        return self.snmp_jobs
+
     def stop(self):
         pass
+
+class StatusWeb(resource.Resource):
+    isLeaf = True
+    def __init__(self, tw):
+        resource.Resource.__init__(self)
+        self.tw = tw
+        debug('init simple')
+    def render_GET(self, request):
+        head =  '<html><title></title><body>'
+        footer = '</body></html>'
+        table = '<table>'
+        status = self.tw.status()
+        for job in status:
+            table += '<tr>'
+            table += '<td>'+job+'</td>'
+            table += '<td>'+str(status[job][2])+'</td>'
+            table += '<td>'+status[job][3]+'</td>'
+            table += '</tr>'
+        table += '</table>'
+        return head+table+footer
 
 
 basicConfig(level=DEBUG, format='%(asctime)s %(levelname)s %(message)s')
 
 tw = TwistSnmp('MySQLdb', dbname='mon', dbuser='root')
 tw.start()
+
+reactor.listenTCP(8080, server.Site(StatusWeb(tw)))
 
 reactor.run()
 
