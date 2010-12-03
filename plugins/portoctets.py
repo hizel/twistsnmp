@@ -51,6 +51,8 @@ def receive((errorIndication, errorStatus, errorIndex, varBinds, cbCtx)):
                     speed_out,
                     now),
 
+
+
         c = ClientCreator(reactor, CarbonProtocol, values)
         c.connectTCP(
                 cbCtx.carbon_host,
