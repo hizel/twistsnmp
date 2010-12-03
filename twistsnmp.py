@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 
 from datetime import datetime
+from time import time
 from twisted.internet.task import LoopingCall
 from twisted.internet import reactor, defer
 from twisted.enterprise import adbapi
 from twisted.web import xmlrpc, server, resource
+from twisted.internet.protocol import Protocol, ClientCreator
 
 from pysnmp.entity import engine, config
 from pysnmp.carrier.twisted import dispatch
@@ -14,13 +16,16 @@ from pysnmp.entity.rfc3413 import cmdgen
 
 from logging import basicConfig, DEBUG, debug, error, info
 
+def _cbFun(sendRequestHandle, errorIndication,
+        errorStatus, errorIndex, varBinds, cbCtx):
+    cbCtx.callback((errorIndication, errorStatus, errorIndex, varBinds, cbCtx))
+
 class GetCommandGenerator(cmdgen.GetCommandGenerator):
     def sendReq(
             self,
             snmpEngine,
             addrName,
             varBinds,
-            cbFunc,
             contextEngineId=None,
             contextName=''
             ):
@@ -30,7 +35,7 @@ class GetCommandGenerator(cmdgen.GetCommandGenerator):
                 snmpEngine,
                 addrName,
                 varBinds,
-                cbFunc,
+                _cbFun,
                 df,
                 contextEngineId,
                 contextName
@@ -64,6 +69,18 @@ class GetCommandGenerator(cmdgen.GetCommandGenerator):
                     cbCtx)
                 )
 
+class CarbonProtocol(Protocol):
+    def __init__(self, path, value, timestamp):
+        self.path = path
+        self.value = value
+        self.timestamp = timestamp
+
+    def sendMessage(self):
+        debug('send %s %s %s' % (self.path, self.value, self.timestamp))
+        self.transport.write('%s %s %s\n' % (self.path, self.value,
+            self.timestamp))
+        self.transport.loseConnection()
+
 class TwistSnmp(object):
     def __init__(self, dbapiName, dbname, dbuser, dbpass='', dbhost='localhost'):
         debug('init')
@@ -84,19 +101,26 @@ class TwistSnmp(object):
         self.jobs = ()
         self.snmp_jobs = {}
 
-    def _error_cb(self, sendRequestHandle, errorIndication, errorStatus, errorIndex,
-                      varBinds, cbCtx):
-        cbCtx.callback((errorIndication, errorStatus, errorIndex, varBinds, cbCtx))
+    def _job_afterconnect(self, p):
+        p.sendMessage()
+        debug('send message to carbon')
 
     def _snmp_recv_task(self, (errorIndication, errorStatus, errorIndex, varBinds, cbCtx)):
         debug('snmp recv for %s %s' % (cbCtx.job_host, cbCtx.job_uid))
-        cbCtx.snmp_jobs[cbCtx.job_name][2] = datetime.now()
+        cbCtx.snmp_jobs[cbCtx.job_name][2] = int(time())
         if errorIndication or errorStatus:
             error('snmp error for job %s %s' % (cbCtx.job_name, cbCtx.job_uid))
             cbCtx.snmp_jobs[cbCtx.job_name][3] = 'ERROR'
             return
         cbCtx.snmp_jobs[cbCtx.job_name][1] = varBinds
         cbCtx.snmp_jobs[cbCtx.job_name][3] = 'OK'
+        if cbCtx.snmp_jobs[cbCtx.job_name][4] != None:
+            newvalue = int((varBinds[0][1]-cbCtx.snmp_jobs[cbCtx.job_name][4])/(int(time())-cbCtx.snmp_jobs[cbCtx.job_name][5]))
+            c = ClientCreator(reactor, CarbonProtocol, *( cbCtx.job_name,
+                newvalue, int(time())))
+            c.connectTCP("localhost", 2003).addCallback(self._job_afterconnect)
+        cbCtx.snmp_jobs[cbCtx.job_name][4] =  varBinds[0][1]
+        cbCtx.snmp_jobs[cbCtx.job_name][5] =  int(time())
 
     def _job_snmp_task(self, host, name, uid_str):
         uid_tuple = uid_str.split('.')[1:]
@@ -107,7 +131,6 @@ class TwistSnmp(object):
                 self.snmpEngine,
                 host,
                 ((uid, None),),
-                self._error_cb
                 )
         df.job_host = host
         df.job_uid = uid
@@ -135,7 +158,8 @@ class TwistSnmp(object):
                 info('add new jobs: %s with %d sec' % (job_name, job_freq))
                 snmp_job = LoopingCall(self._job_snmp_task, *(job_host, job_name, job_uid))
                 snmp_job.start(job_freq)
-                self.snmp_jobs[job_name] = [snmp_job, 0, 0, 'UNKNOWN']
+                self.snmp_jobs[job_name] = [snmp_job, 0, 0, 'UNKNOWN', None,
+                        None]
             self.jobs = new_jobs
         
     def _db_receive_task(self, new_hosts):
