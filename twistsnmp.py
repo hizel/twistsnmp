@@ -158,7 +158,8 @@ class TwistSnmp(object):
                 host_addr = host[0]
                 host_port = host[3]
                 debug('add V1System name:%s community:%s',name, community)
-                config.addV1System(self.snmpEngine, name, community)
+                config.addV1System(self.snmpEngine, name, community,
+                        transportTag=name)
 
                 debug('addTargetParams name:%s version:%s',name, version)
                 if version == 'v1':
@@ -173,7 +174,8 @@ class TwistSnmp(object):
                         name,   
                         config.snmpUDPDomain,
                         (host_addr, host_port),
-                        name)
+                        name,
+                        tagList=name)
                 debug('add new host %s with community %s version %s succesful' % host[:3])
 
             self.hosts = new_hosts
