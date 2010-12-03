@@ -12,62 +12,11 @@ from twisted.internet.protocol import Protocol, ClientCreator
 from pysnmp.entity import engine, config
 from pysnmp.carrier.twisted import dispatch
 from pysnmp.carrier.twisted.dgram import udp
-from pysnmp.entity.rfc3413 import cmdgen
 
 from logging import basicConfig, DEBUG, debug, error, info
 
-def _cbFun(sendRequestHandle, errorIndication,
-        errorStatus, errorIndex, varBinds, cbCtx):
-    cbCtx.callback((errorIndication, errorStatus, errorIndex, varBinds, cbCtx))
+from plugins.util import GetCommandGenerator
 
-class GetCommandGenerator(cmdgen.GetCommandGenerator):
-    def sendReq(
-            self,
-            snmpEngine,
-            addrName,
-            varBinds,
-            contextEngineId=None,
-            contextName=''
-            ):
-        df = defer.Deferred()
-        cmdgen.GetCommandGenerator.sendReq(
-                self,
-                snmpEngine,
-                addrName,
-                varBinds,
-                _cbFun,
-                df,
-                contextEngineId,
-                contextName
-                )
-        return df
-    def _handleResponse(
-            self,
-            snmpEngine,
-            transportDomain,
-            transportAddress,
-            messageProcessingModel,
-            securityModel,
-            securityName,
-            securityLevel,
-            contextEngineId,
-            contextName,
-            pduVersion,
-            PDU,
-            timeout,
-            retryCount,
-            pMod,
-            rspPDU,
-            sendRequestHandle,
-            (cbFun, cbCtx)
-            ):
-        cbCtx.callback(
-                (None,
-                    pMod.apiPDU.getErrorStatus(rspPDU),
-                    pMod.apiPDU.getErrorIndex(rspPDU),
-                    pMod.apiPDU.getVarBinds(rspPDU),
-                    cbCtx)
-                )
 
 class CarbonProtocol(Protocol):
     def __init__(self, path, value, timestamp):
