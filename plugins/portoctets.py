@@ -63,14 +63,15 @@ def receive((errorIndication, errorStatus, errorIndex, varBinds, cbCtx)):
 
 
 def fetch(snmpEngine, carbon_host, carbon_port, host_name, job_info, port_name, port_id):
-    debug('port-octets: generate snmp from %s %s' % (host_name, port_name))
+    debug('port-octets: generate snmp from %s %s %s' % (host_name, port_name,
+        port_id))
     getCmdGen = GetCommandGenerator()
     df = getCmdGen.sendReq(
             snmpEngine,
             host_name,
             (
-                (ifHCInOctets+(port_id,), None),
-                (ifHCOutOctets+(port_id,), None),
+                ((ifHCInOctets+(int(port_id),)), None),
+                ((ifHCOutOctets+(int(port_id),)), None),
                 ),
             )
 
@@ -78,7 +79,7 @@ def fetch(snmpEngine, carbon_host, carbon_port, host_name, job_info, port_name, 
     df.port_name = port_name
     df.carbon_host = carbon_host
     df.carbon_port = carbon_port
-    df.port_id = port_id
+    df.port_id = int(port_id)
     df.job_info = job_info
 
     df.addCallback(receive)
