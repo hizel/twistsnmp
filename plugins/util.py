@@ -2,6 +2,20 @@
 
 from twisted.internet import defer
 from pysnmp.entity.rfc3413 import cmdgen
+from twisted.internet.protocol import Protocol
+from logging import debug, error, info
+
+
+class CarbonProtocol(Protocol):
+    def __init__(self, values):
+        self.values = values
+
+    def sendMessage(self):
+        for path, value, timestamp in self.values:
+            debug('send %s %s %s' % (path, value, timestamp))
+            self.transport.write('%s %s %s\n' % (path, value,
+                timestamp))
+            self.transport.loseConnection()
 
 def _cbFun(sendRequestHandle, errorIndication,
         errorStatus, errorIndex, varBinds, cbCtx):
