@@ -149,13 +149,11 @@ class StatusWeb(resource.Resource):
         table += '</table>'
         return head+table+footer
 
+if __name__ == "__main__":
 
-basicConfig(level=DEBUG, format='%(asctime)s %(levelname)s %(message)s')
-
-tw = TwistSnmp('MySQLdb', dbname='mon', dbuser='root')
-tw.start()
-
-reactor.listenTCP(8080, server.Site(StatusWeb(tw)))
-
-reactor.run()
+    basicConfig(level=DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+    tw = TwistSnmp('MySQLdb', dbname='mon', dbuser='root')
+    tw.start()
+    reactor.listenTCP(8080, server.Site(StatusWeb(tw)))
+    reactor.run()
 
