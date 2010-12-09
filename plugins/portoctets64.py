@@ -6,8 +6,8 @@ from logging import debug, error, info
 from twisted.internet.protocol import ClientCreator
 from twisted.internet import reactor
 
-ifInOctets = (1,3,6,1,2,1,2,2,1,10)
-ifOutOctets = (1,3,6,1,2,1,2,2,1,16)
+ifHCInOctets = (1,3,6,1,2,1,31,1,1,1,6)
+ifHCOutOctets = (1,3,6,1,2,1,31,1,1,1,10)
 
 def receive((errorIndication, errorStatus, errorIndex, varBinds, cbCtx)):
     if errorIndication or errorStatus:
@@ -30,10 +30,10 @@ def receive((errorIndication, errorStatus, errorIndex, varBinds, cbCtx)):
     if cbCtx.job_info['in'] != None:
         d_in = _in - cbCtx.job_info['in']
         if d_in < 0:
-            d_in += 2**32
+            d_in += 2**64
         d_out = _out - cbCtx.job_info['out']
         if d_out < 0:
-            d_out += 2**32
+            d_out += 2**64
         d_time = now - cbCtx.job_info['time']
 
         debug('delta in:%s delta time:%s' % ( d_in, d_time))
@@ -41,13 +41,13 @@ def receive((errorIndication, errorStatus, errorIndex, varBinds, cbCtx)):
         speed_in = d_in*8/d_time  # MBit
         speed_out = d_out*8/d_time
 
-        values += ( '%s.ports.%s.octets.in' % (
+        values += ( '%s.ports.%s.octets64.in' % (
                                       cbCtx.host_name,
                                       cbCtx.port_name
                                     ),
                     speed_in,
                     now),
-        values += ( '%s.ports.%s.octets.out' % (
+        values += ( '%s.ports.%s.octets64.out' % (
                                       cbCtx.host_name,
                                       cbCtx.port_name
                                     ),
@@ -68,7 +68,7 @@ def receive((errorIndication, errorStatus, errorIndex, varBinds, cbCtx)):
 
 
 def fetch(snmpEngine, carbon_host, carbon_port, host_name, job_info, port_name, port_id):
-    debug('port-octets: generate snmp from %s %s %s' % (host_name, port_name,
+    debug('port-octets64: generate snmp from %s %s %s' % (host_name, port_name,
         port_id))
     getCmdGen = GetCommandGenerator()
     df = getCmdGen.sendReq(
